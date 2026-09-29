@@ -25,7 +25,7 @@ server = Flask(__name__)
 
 @server.route('/')
 def home():
-    return "VK International Bot is Running Live!"
+    return "VK International Bot is Running Superfast!"
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
@@ -44,11 +44,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     welcome_text = (
         "<b>VK International Lv</b> | European Employment Services\n"
         "────────────────────────────\n"
-        "Welcome to our official candidate registration portal.\n\n"
-        "We arrange verified employment contracts and official residency work permits for <b>Latvia, Poland, and Germany</b>.\n\n"
-        "👉 Please enter your <b>Full Name</b> as printed on your Passport:"
+        "Welcome to our verified candidate registration desk for <b>Latvia, Poland, and Germany</b>.\n\n"
+        "👉 Please enter your <b>Full Name</b> (as printed on your Passport/ID):"
     )
-    await update.message.reply_text(welcome_text, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
+    if update.message:
+        await update.message.reply_text(welcome_text, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
+    elif update.callback_query:
+        await update.callback_query.message.reply_text(welcome_text, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
     return NAME
 
 # Step 2: Passport (Clickable Inline Buttons)
@@ -56,45 +58,48 @@ async def ask_passport(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     context.user_data["name"] = update.message.text.strip()
     
     keyboard = [
-        [
-            InlineKeyboardButton("Yes, Passport Ready", callback_data="Passport: Ready"),
-            InlineKeyboardButton("In Process / Applied", callback_data="Passport: In Process")
-        ],
-        [
-            InlineKeyboardButton("No, Need Assistance", callback_data="Passport: None")
-        ]
+        [InlineKeyboardButton("✅ Yes, Passport Ready", callback_data="Passport: Ready")],
+        [InlineKeyboardButton("⏳ Applied / In Process", callback_data="Passport: In Process")],
+        [InlineKeyboardButton("❌ Don't Have Passport Yet", callback_data="Passport: None")]
     ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     await update.message.reply_text(
         f"Thank you, <b>{context.user_data['name']}</b>.\n\n"
-        "Do you currently hold an active, valid international passport?",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        "Do you currently hold an active, valid international passport?\n"
+        "<i>(Click one of the options below)</i>",
+        reply_markup=reply_markup,
         parse_mode="HTML"
     )
     return PASSPORT
 
-# Step 3: Jobs List
+# Step 3: Jobs List (Clickable Inline Buttons)
 async def ask_job(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     context.user_data["passport"] = query.data.replace("Passport: ", "")
 
     keyboard = [
-        [InlineKeyboardButton("📦 Warehouse & Logistics", callback_data="Job: Warehouse & Logistics")],
+        [InlineKeyboardButton("📦 Warehouse & Packaging", callback_data="Job: Warehouse & Packaging")],
         [InlineKeyboardButton("🏭 Factory & Production Worker", callback_data="Job: Factory & Production")],
         [InlineKeyboardButton("🚜 Forklift / Machine Operator", callback_data="Job: Forklift Operator")],
-        [InlineKeyboardButton("🚛 Heavy Truck / Delivery Driver", callback_data="Job: Commercial Driver")],
+        [InlineKeyboardButton("🚛 Heavy Commercial Driver", callback_data="Job: Commercial Driver")],
         [InlineKeyboardButton("🏗 Construction & Skilled Trades", callback_data="Job: Construction Trades")],
-        [InlineKeyboardButton("🍽 Hospitality & Food Service", callback_data="Job: Hospitality & Kitchen")]
+        [InlineKeyboardButton("🍽 Hospitality & Food Service", callback_data="Job: Hospitality & Kitchen")],
+        [InlineKeyboardButton("🔧 Other / General Work", callback_data="Job: Other Work")]
     ]
-    await query.edit_message_text(
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.message.reply_text(
         "<b>Verified Vacancies Available</b>\n\n"
-        "Please select the industry sector that matches your practical work experience:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        "Please select the industry matching your practical work experience:\n"
+        "<i>(Click your job profile below)</i>",
+        reply_markup=reply_markup,
         parse_mode="HTML"
     )
     return JOB
 
-# Step 4: Experience
+# Step 4: Experience Selection (Clickable Inline Buttons)
 async def ask_experience(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -102,7 +107,7 @@ async def ask_experience(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     keyboard = [
         [
-            InlineKeyboardButton("Fresher / Entry Level", callback_data="Exp: Fresher (0-1 yr)"),
+            InlineKeyboardButton("Fresher (0–1 yr)", callback_data="Exp: Fresher"),
             InlineKeyboardButton("1 – 2 Years", callback_data="Exp: 1-2 Years")
         ],
         [
@@ -110,40 +115,41 @@ async def ask_experience(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             InlineKeyboardButton("6 – 9 Years", callback_data="Exp: 6-9 Years")
         ],
         [
-            InlineKeyboardButton("10+ Years (Senior / Expert)", callback_data="Exp: 10+ Years")
+            InlineKeyboardButton("10+ Years (Senior)", callback_data="Exp: 10+ Years")
         ]
     ]
-    await query.edit_message_text(
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.message.reply_text(
         f"Selected Role: <b>{context.user_data['job']}</b>\n\n"
-        "Select your overall verified work experience in this field:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        "Select your overall verified work experience in this trade:",
+        reply_markup=reply_markup,
         parse_mode="HTML"
     )
     return EXPERIENCE
 
-# Step 5: Auto Contact Request Button
+# Step 5: Mobile Number Request (With Auto-Share Button + Text Option)
 async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     context.user_data["experience"] = query.data.replace("Exp: ", "")
 
-    # Bada automatic contact button keyboard me dikhega
     contact_keyboard = [
-        [KeyboardButton("📱 Tap to Share My WhatsApp / Mobile Number", request_contact=True)]
+        [KeyboardButton("📱 Tap to Share My Mobile Number", request_contact=True)]
     ]
     reply_markup = ReplyKeyboardMarkup(contact_keyboard, resize_keyboard=True, one_time_keyboard=True)
 
     await query.message.reply_text(
         "<b>Final Step: Verification</b>\n\n"
-        "Please click the button below to automatically share your verified mobile number for WhatsApp contact:",
+        "👉 Click the button below: <b>[📱 Tap to Share My Mobile Number]</b>\n\n"
+        "<i>(Or simply type your 10-digit WhatsApp number with country code, e.g. +91 9876543210)</i>",
         reply_markup=reply_markup,
         parse_mode="HTML"
     )
     return PHONE
 
-# Final Step: Capture Contact or Typed Number & Notify Admin
+# Final Step: Capture Lead & Alert Admin
 async def finish_and_save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # Auto contact share check
     if update.message.contact:
         phone = update.message.contact.phone_number
         if not phone.startswith('+'):
@@ -155,19 +161,20 @@ async def finish_and_save(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user = update.effective_user
     username_text = f"@{user.username}" if user.username else "No username"
 
-    # User ko clean confirmation
+    # User Confirmation
     success_text = (
         "✅ <b>Application Registered Successfully!</b>\n"
         "────────────────────────────\n"
         f"Candidate: <b>{context.user_data.get('name')}</b>\n"
-        f"Applied For: <b>{context.user_data.get('job')}</b>\n\n"
-        "Our European recruitment team in Riga, Latvia has received your details.\n\n"
+        f"Applied Trade: <b>{context.user_data.get('job')}</b>\n"
+        f"Experience: <b>{context.user_data.get('experience')}</b>\n\n"
+        "Our European placement desk in Riga, Latvia has received your file.\n\n"
         "📞 A visa coordinator will review your profile and contact you on WhatsApp <b>within 24 hours</b>.\n\n"
         "<i>VK International Lv — European Placement Desk</i>"
     )
     await update.message.reply_text(success_text, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
 
-    # Admin ko instant alert
+    # Admin Alert
     lead_summary = (
         "🚨 <b>NEW CANDIDATE LEAD</b>\n"
         "────────────────────────────\n"
@@ -187,7 +194,7 @@ async def finish_and_save(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             parse_mode="HTML"
         )
     except Exception as e:
-        logging.error(f"Failed to forward lead: {e}")
+        logging.error(f"Failed to forward lead to admin: {e}")
 
     return ConversationHandler.END
 
