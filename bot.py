@@ -2,17 +2,18 @@ import os
 import threading
 import logging
 from flask import Flask
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
+    CallbackQueryHandler,
     ConversationHandler,
     ContextTypes,
     filters,
 )
 
-# Dummy web server to keep Render Free Web Service alive
+# Render dummy web server
 server = Flask(__name__)
 
 @server.route('/')
@@ -27,112 +28,152 @@ def run_web():
 BOT_TOKEN = "8998645638:AAEem-IkFbKEj_0uXcgzaF1qipS_Y3UemJE"
 ADMIN_CHAT_ID = "8638498161"
 
-AVAILABLE_JOBS = [
-    ["Warehouse Packaging", "Factory Helper"],
-    ["Forklift Operator", "Long-Haul Truck Driver"],
-    ["Construction Worker", "Hotel & Kitchen Staff"],
-    ["Agriculture / Farm Worker", "Welder / Fitter"],
-    ["Other / General Work"]
-]
-
+# Conversation States
 NAME, PASSPORT, JOB, EXPERIENCE, PHONE = range(5)
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
+# Step 1: Greeting & Ask Name
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text(
-        "👋 **Welcome to VK International Lv!**\n\n"
-        "We specialize in verified employment contracts and legal European work permits (Latvia, Poland, Germany).\n\n"
-        "To check your eligibility and fast-track your application, please answer a few quick questions.\n\n"
-        "👉 **What is your Full Name (as per your Passport or official ID)?**",
-        reply_markup=ReplyKeyboardRemove(),
-        parse_mode="Markdown"
+    context.user_data.clear()
+    welcome_text = (
+        "<b>VK International Lv</b> | European Employment Services\n"
+        "────────────────────────────\n"
+        "Welcome to our official European work visa candidate intake portal.\n\n"
+        "We arrange verified employment contracts and official residency work permits for <b>Latvia, Poland, and Germany</b>.\n\n"
+        "Please enter your <b>Full Name</b> as printed on your Passport:"
     )
+    await update.message.reply_text(welcome_text, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
     return NAME
 
+# Step 2: Passport (Clickable Inline Buttons)
 async def ask_passport(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["name"] = update.message.text.strip()
-    reply_keyboard = [["✅ Yes, I have a valid Passport", "❌ No, I do not have one yet"]]
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("Yes, Passport Ready", callback_data="Passport: Ready"),
+            InlineKeyboardButton("In Process / Applied", callback_data="Passport: In Process")
+        ],
+        [
+            InlineKeyboardButton("No, Need Assistance", callback_data="Passport: None")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     await update.message.reply_text(
-        f"Thank you, {context.user_data['name']}!\n\n"
-        "👉 **Do you currently hold a valid international passport?**",
-        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
+        f"Thank you, <b>{context.user_data['name']}</b>.\n\n"
+        "Do you currently hold an active, valid international passport?",
+        reply_markup=reply_markup,
+        parse_mode="HTML"
     )
     return PASSPORT
 
+# Step 3: Job Selection (Clickable Inline Buttons)
 async def ask_job(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["passport"] = update.message.text.strip()
-    await update.message.reply_text(
-        "Excellent. We currently have active hiring batches across multiple industries.\n\n"
-        "👉 **Please select the role matching your primary work experience:**",
-        reply_markup=ReplyKeyboardMarkup(AVAILABLE_JOBS, one_time_keyboard=True, resize_keyboard=True)
+    query = update.callback_query
+    await query.answer()
+    
+    context.user_data["passport"] = query.data.replace("Passport: ", "")
+
+    keyboard = [
+        [InlineKeyboardButton("📦 Warehouse & Logistics", callback_data="Job: Warehouse & Logistics")],
+        [InlineKeyboardButton("🏭 Factory & Production Worker", callback_data="Job: Factory & Production")],
+        [InlineKeyboardButton("🚜 Forklift / Machine Operator", callback_data="Job: Forklift Operator")],
+        [InlineKeyboardButton("🚛 Heavy Truck / Delivery Driver", callback_data="Job: Commercial Driver")],
+        [InlineKeyboardButton("🏗 Construction & Skilled Trades", callback_data="Job: Construction Trades")],
+        [InlineKeyboardButton("🍽 Hospitality & Food Service", callback_data="Job: Hospitality & Kitchen")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        "<b>Verified Vacancies Available</b>\n\n"
+        "Please select the industry sector that matches your practical work experience:",
+        reply_markup=reply_markup,
+        parse_mode="HTML"
     )
     return JOB
 
+# Step 4: Experience Selection (Clickable Buttons)
 async def ask_experience(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["job"] = update.message.text.strip()
-    exp_keyboard = [
-        ["Fresher (0 Years)", "1 Year", "2 Years"],
-        ["3 Years", "4 Years", "5 Years"],
-        ["6-8 Years", "9-10 Years", "10+ Years"]
+    query = update.callback_query
+    await query.answer()
+    
+    context.user_data["job"] = query.data.replace("Job: ", "")
+
+    keyboard = [
+        [
+            InlineKeyboardButton("Fresher / Entry Level", callback_data="Exp: Fresher (0-1 yr)"),
+            InlineKeyboardButton("1 – 2 Years", callback_data="Exp: 1-2 Years")
+        ],
+        [
+            InlineKeyboardButton("3 – 5 Years", callback_data="Exp: 3-5 Years"),
+            InlineKeyboardButton("6 – 9 Years", callback_data="Exp: 6-9 Years")
+        ],
+        [
+            InlineKeyboardButton("10+ Years (Senior / Expert)", callback_data="Exp: 10+ Years")
+        ]
     ]
-    await update.message.reply_text(
-        f"Selected Role: *{context.user_data['job']}*\n\n"
-        "👉 **How many years of relevant experience do you have in this field?**",
-        reply_markup=ReplyKeyboardMarkup(exp_keyboard, one_time_keyboard=True, resize_keyboard=True),
-        parse_mode="Markdown"
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        f"Selected Role: <b>{context.user_data['job']}</b>\n\n"
+        "Select your overall verified work experience in this specific field:",
+        reply_markup=reply_markup,
+        parse_mode="HTML"
     )
     return EXPERIENCE
 
+# Step 5: Mobile / WhatsApp Number
 async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["experience"] = update.message.text.strip()
-    contact_keyboard = [
-        [KeyboardButton("📱 Share Verified Mobile Number", request_contact=True)]
-    ]
-    await update.message.reply_text(
-        "You are almost done!\n\n"
-        "👉 **Please share your WhatsApp mobile number** so our European visa team can reach out to you:\n\n"
-        "*(Click the button below or type your 10-digit number with country code)*",
-        reply_markup=ReplyKeyboardMarkup(contact_keyboard, one_time_keyboard=True, resize_keyboard=True)
+    query = update.callback_query
+    await query.answer()
+    
+    context.user_data["experience"] = query.data.replace("Exp: ", "")
+
+    await query.edit_message_text(
+        "<b>Candidate Profile Almost Completed</b>\n\n"
+        "Please type your active <b>WhatsApp mobile number</b> (including country code, e.g., <code>+91 9876543210</code>) so our visa coordinator can initiate your evaluation:",
+        parse_mode="HTML"
     )
     return PHONE
 
+# Final Step: Confirmation & Send to Admin
 async def finish_and_save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.contact:
-        phone = update.message.contact.phone_number
-    else:
-        phone = update.message.text.strip()
-        
+    phone = update.message.text.strip()
     context.user_data["phone"] = phone
     user = update.effective_user
     username_text = f"@{user.username}" if user.username else "N/A"
 
-    await update.message.reply_text(
-        "🎉 **Application Submitted Successfully!**\n\n"
-        "Your profile has been registered in our recruitment system.\n\n"
-        "📞 **Next Step:** Our dedicated visa coordinator will review your file and contact you via WhatsApp or direct call **within 24 hours**.\n\n"
-        "📍 **VK International Lv**\n"
-        "European Recruitment & Placement Agency | Riga, Latvia",
-        reply_markup=ReplyKeyboardRemove(),
-        parse_mode="Markdown"
+    # Clean, professional confirmation to candidate
+    success_text = (
+        "<b>Application Registered Successfully</b>\n"
+        "────────────────────────────\n"
+        "Your preliminary profile has been assigned to our European recruitment desk in Riga, Latvia.\n\n"
+        "<b>What Happens Next:</b>\n"
+        "• Document verification by our licensing advisor.\n"
+        "• Direct WhatsApp / Phone outreach within <b>24 business hours</b>.\n\n"
+        "<i>VK International Lv — Certified European Employment Desk</i>"
     )
+    await update.message.reply_text(success_text, parse_mode="HTML")
 
+    # High-Priority Admin Alert
     lead_summary = (
-        "🚨 **NEW CANDIDATE REGISTRATION**\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 **Candidate Name:** {context.user_data.get('name')}\n"
-        f"📱 **WhatsApp / Phone:** `{phone}`\n"
-        f"🛂 **Passport Status:** {context.user_data.get('passport')}\n"
-        f"💼 **Applied Trade:** {context.user_data.get('job')}\n"
-        f"⏳ **Experience Level:** {context.user_data.get('experience')}\n"
-        f"💬 **Telegram Handle:** {username_text} (ID: `{user.id}`)\n"
-        "━━━━━━━━━━━━━━━━━━━━━━"
+        "<b>🚨 NEW EUROPE CANDIDATE DOSSIER</b>\n"
+        "────────────────────────────\n"
+        f"👤 <b>Candidate Name:</b> {context.user_data.get('name')}\n"
+        f"📱 <b>WhatsApp / Phone:</b> <code>{phone}</code>\n"
+        f"🛂 <b>Passport Status:</b> {context.user_data.get('passport')}\n"
+        f"💼 <b>Industry / Trade:</b> {context.user_data.get('job')}\n"
+        f"⏳ <b>Experience:</b> {context.user_data.get('experience')}\n"
+        f"💬 <b>Telegram Account:</b> {username_text} (ID: <code>{user.id}</code>)\n"
+        "────────────────────────────"
     )
 
     try:
         await context.bot.send_message(
             chat_id=ADMIN_CHAT_ID,
             text=lead_summary,
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
     except Exception as e:
         logging.error(f"Failed to forward lead to admin: {e}")
@@ -140,11 +181,10 @@ async def finish_and_save(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Application session cancelled. Type /start anytime to begin again.")
+    await update.message.reply_text("Session terminated. Type /start anytime to begin a new application.", parse_mode="HTML")
     return ConversationHandler.END
 
 def main():
-    # Start web server thread
     threading.Thread(target=run_web, daemon=True).start()
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -152,18 +192,15 @@ def main():
         entry_points=[CommandHandler("start", start)],
         states={
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_passport)],
-            PASSPORT: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_job)],
-            JOB: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_experience)],
-            EXPERIENCE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_phone)],
-            PHONE: [
-                MessageHandler(filters.CONTACT, finish_and_save),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, finish_and_save),
-            ],
+            PASSPORT: [CallbackQueryHandler(ask_job)],
+            JOB: [CallbackQueryHandler(ask_experience)],
+            EXPERIENCE: [CallbackQueryHandler(ask_phone)],
+            PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, finish_and_save)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     app.add_handler(conv_handler)
-    print("VK International Bot is active and listening...")
+    print("VK International Bot is active...")
     app.run_polling()
 
 if __name__ == "__main__":
