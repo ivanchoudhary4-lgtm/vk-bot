@@ -44,8 +44,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     welcome_text = (
         "<b>VK International Lv</b> | European Employment Services\n"
         "────────────────────────────\n"
-        "Welcome to our verified candidate registration desk for <b>Latvia, Poland, and Germany</b>.\n\n"
-        "👉 Please enter your <b>Full Name</b> (as printed on your Passport/ID):"
+        "Welcome to our verified candidate registration desk for <b>Europe</b>.\n\n"
+        "👉 <b> Please enter your Full Name</b> (as printed on your Passport/ID):"
     )
     if update.message:
         await update.message.reply_text(welcome_text, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
